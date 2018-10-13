@@ -29,7 +29,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Parameter;
 
 /**
- * @version $Id$
+ * Base class for DeployMojo.
  */
 public abstract class AbstractDeployMojo
     extends AbstractMojo
@@ -55,7 +55,7 @@ public abstract class AbstractDeployMojo
     
     /* Setters and Getters */
 
-    void failIfOffline()
+    protected void failIfOffline()
         throws MojoFailureException
     {
         if ( offline )
@@ -64,7 +64,7 @@ public abstract class AbstractDeployMojo
         }
     }
 
-    int getRetryFailedDeploymentCount()
+    protected int getRetryFailedDeploymentCount()
     {
         return retryFailedDeploymentCount;
     }

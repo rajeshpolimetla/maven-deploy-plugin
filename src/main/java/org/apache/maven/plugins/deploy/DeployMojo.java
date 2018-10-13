@@ -55,6 +55,8 @@ public class DeployMojo
 
     private static final Pattern ALT_REPO_SYNTAX_PATTERN = Pattern.compile( "(.+)::(.+)" );
 
+    private static final Pattern OLD_ALT_REPO_SYNTAX_PATTERN = Pattern.compile( "(.+)::(.+)::(.+)" );
+
     /**
      * When building with multiple threads, reaching the last project doesn't have to mean that all projects are ready
      * to be deployed
@@ -85,26 +87,29 @@ public class DeployMojo
     /**
      * Specifies an alternative repository to which the project artifacts should be deployed ( other than those
      * specified in &lt;distributionManagement&gt; ). <br/>
-     * Format: <code>id::url</code>
      * <dl>
      * <dt>id</dt>
      * <dd>The id can be used to pick up the correct credentials from the settings.xml</dd>
      * <dt>url</dt>
      * <dd>The location of the repository</dd>
      * </dl>
+     * <p>
      * <b>Note:</b> In version 2, the format was <code>id::layout::url</code>, but since 3.0.0 the layout part has been
      * removed because Maven 3 only supports <code>default</code> (ie. Maven 2) layout and not <code>legacy</code>
      * (Maven 1) layout.</b>
+     * </p>
      */
     @Parameter( property = "altDeploymentRepository" )
     private String altDeploymentRepository;
 
     /**
      * The alternative repository to use when the project has a snapshot version.
-     *
+     * <p>
      * <b>Note:</b> In version 2, the format was <code>id::layout::url</code>, but since 3.0.0 the layout part has been
      * removed because Maven 3 only supports <code>default</code> (ie. Maven 2) layout and not <code>legacy</code>
      * (Maven 1) layout.</b>
+     * </p>
+     * 
      * @since 2.8
      * @see DeployMojo#altDeploymentRepository
      */
@@ -113,10 +118,12 @@ public class DeployMojo
 
     /**
      * The alternative repository to use when the project has a final version.
-     *
+     * <p>
      * <b>Note:</b> In version 2, the format was <code>id::layout::url</code>, but since 3.0.0 the layout part has been
      * removed because Maven 3 only supports <code>default</code> (ie. Maven 2) layout and not <code>legacy</code>
      * (Maven 1) layout.</b>
+     * </p>
+     * 
      * @since 2.8
      * @see DeployMojo#altDeploymentRepository
      */
@@ -140,6 +147,8 @@ public class DeployMojo
     public void execute()
         throws MojoExecutionException, MojoFailureException
     {
+        checkParameterForOldRepositorySyntax();
+
         boolean addedDeployRequest = false;
         if ( skip )
         {
@@ -194,7 +203,7 @@ public class DeployMojo
     }
 
     private void deployProject( ProjectBuildingRequest pbr, ProjectDeployerRequest pir, ArtifactRepository repo )
-        throws MojoFailureException, MojoExecutionException
+        throws MojoExecutionException
     {
         try
         {
@@ -211,16 +220,13 @@ public class DeployMojo
 
     }
 
-    ArtifactRepository getDeploymentRepository( ProjectDeployerRequest pdr )
-
-        throws MojoExecutionException, MojoFailureException
+    private String getAlternateDeploymentRepository( ProjectDeployerRequest pdr )
     {
-        MavenProject project = pdr.getProject();
         String altDeploymentRepository = pdr.getAltDeploymentRepository();
         String altReleaseDeploymentRepository = pdr.getAltReleaseDeploymentRepository();
         String altSnapshotDeploymentRepository = pdr.getAltSnapshotDeploymentRepository();
 
-        ArtifactRepository repo = null;
+        MavenProject project = pdr.getProject();
 
         String altDeploymentRepo;
         if ( ArtifactUtils.isSnapshot( project.getVersion() ) && altSnapshotDeploymentRepository != null )
@@ -235,25 +241,33 @@ public class DeployMojo
         {
             altDeploymentRepo = altDeploymentRepository;
         }
+        return altDeploymentRepo;
+    }
 
+    ArtifactRepository getDeploymentRepository( ProjectDeployerRequest pdr )
+
+        throws MojoExecutionException, MojoFailureException
+    {
+        MavenProject project = pdr.getProject();
+
+        String altDeploymentRepo = getAlternateDeploymentRepository( pdr );
+
+        ArtifactRepository repo = null;
         if ( altDeploymentRepo != null )
         {
             getLog().info( "Using alternate deployment repository " + altDeploymentRepo );
 
             Matcher matcher = ALT_REPO_SYNTAX_PATTERN.matcher( altDeploymentRepo );
-
             if ( !matcher.matches() )
             {
                 throw new MojoFailureException( altDeploymentRepo, "Invalid syntax for repository.",
                                                 "Invalid syntax for alternative repository. Use \"id::url\"." );
             }
-            else
-            {
-                String id = matcher.group( 1 ).trim();
-                String url = matcher.group( 2 ).trim();
 
-                repo = createDeploymentArtifactRepository( id, url );
-            }
+            String id = matcher.group( 1 ).trim();
+            String url = matcher.group( 2 ).trim();
+
+            repo = createDeploymentArtifactRepository( id, url );
         }
 
         if ( repo == null )
@@ -270,6 +284,33 @@ public class DeployMojo
         }
 
         return repo;
+    }
+
+    void checkParameterForOldRepositorySyntax()
+        throws MojoFailureException
+    {
+        checkForOldRepositorySyntax( altReleaseDeploymentRepository, "altReleaseDeploymentRepository" );
+        checkForOldRepositorySyntax( altDeploymentRepository, "altDeploymentRepository" );
+        checkForOldRepositorySyntax( altSnapshotDeploymentRepository, "altSnapshotDeploymentRepository" );
+    }
+
+    void checkForOldRepositorySyntax( String repository, String parameterName )
+        throws MojoFailureException
+    {
+        if ( repository != null )
+        {
+            if ( matchesOldSyntax( repository ) )
+            {
+                throw new MojoFailureException( repository,
+                                                "The syntax for the " + parameterName + " has been changed.",
+                                                "Please use \"id::url\" instead of \"id::layout::url\"." );
+            }
+        }
+    }
+
+    private boolean matchesOldSyntax( String repo )
+    {
+        return OLD_ALT_REPO_SYNTAX_PATTERN.matcher( repo ).matches();
     }
 
 }
